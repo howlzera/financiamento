@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestão de Empréstimo</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <div id="root"></div>
@@ -14,6 +13,7 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
     <script>
         const firebaseConfig = {
@@ -207,6 +207,10 @@
                 pixName: '',
                 pixCity: 'Varginha'
             });
+
+            const handleFormChange = (field, value) => {
+                setFormData(prev => ({...prev, [field]: value}));
+            };
 
             useEffect(() => {
                 const q = firebase.firestore().collection('loans').orderBy('createdAt', 'desc');
@@ -502,7 +506,7 @@
                                             </div>
                                             <div>
                                                 <p className="text-sm text-gray-500">Taxa Total</p>
-                                                <p className="text-lg font-bold text-gray-900">{((loan.baseRate || 0) + (loan.riskRate || 0)).toFixed(1)}% + IPCA</p>
+                                                                                                                <p className="text-lg font-bold text-gray-900">{((loan.baseRate || 0) + (loan.riskRate || 0)).toFixed(1).replace('.', ',')}% + IPCA</p>
                                             </div>
                                         </div>
                                         
@@ -529,17 +533,17 @@
                         <h2 className="text-2xl font-bold text-gray-800 mb-6">Novo Empréstimo</h2>
                         
                         <div className="grid md:grid-cols-2 gap-6 mb-8">
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Devedor *</label><input type="text" value={formData.borrowerName} onChange={(e) => setFormData({...formData, borrowerName: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ex: João Silva" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Valor (R$) *</label><input type="number" value={formData.principal} onChange={(e) => setFormData({...formData, principal: Number(e.target.value)})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Chave PIX *</label><input type="text" value={formData.pixKey} onChange={(e) => setFormData({...formData, pixKey: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="123.456.789-00" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome PIX *</label><input type="text" value={formData.pixName} onChange={(e) => setFormData({...formData, pixName: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nome completo" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Cidade PIX *</label><input type="text" value={formData.pixCity} onChange={(e) => setFormData({...formData, pixCity: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Varginha" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Base (% mês)</label><input type="number" step="0.1" value={formData.baseRate} onChange={(e) => setFormData({...formData, baseRate: Number(e.target.value)})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Risco (% mês)</label><input type="number" step="0.1" value={formData.riskRate} onChange={(e) => setFormData({...formData, riskRate: Number(e.target.value)})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Multa Atraso (%)</label><input type="number" step="0.1" value={formData.penaltyRate} onChange={(e) => setFormData({...formData, penaltyRate: Number(e.target.value)})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Meses</label><input type="number" value={formData.months} onChange={(e) => setFormData({...formData, months: Number(e.target.value)})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Data Início</label><input type="month" value={formData.startDate} onChange={(e) => setFormData({...formData, startDate: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Sistema</label><select value={formData.systemType} onChange={(e) => setFormData({...formData, systemType: e.target.value})} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"><option value="price">PRICE</option><option value="sac">SAC</option></select></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Devedor *</label><input type="text" value={formData.borrowerName} onChange={(e) => handleFormChange('borrowerName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ex: João Silva" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Valor (R$) *</label><input type="number" value={formData.principal} onChange={(e) => handleFormChange('principal', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Chave PIX *</label><input type="text" value={formData.pixKey} onChange={(e) => handleFormChange('pixKey', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="123.456.789-00" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome PIX *</label><input type="text" value={formData.pixName} onChange={(e) => handleFormChange('pixName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nome completo" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Cidade PIX *</label><input type="text" value={formData.pixCity} onChange={(e) => handleFormChange('pixCity', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Varginha" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Base (% mês)</label><input type="number" step="0.1" value={formData.baseRate} onChange={(e) => handleFormChange('baseRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Risco (% mês)</label><input type="number" step="0.1" value={formData.riskRate} onChange={(e) => handleFormChange('riskRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Multa Atraso (%)</label><input type="number" step="0.1" value={formData.penaltyRate} onChange={(e) => handleFormChange('penaltyRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Meses</label><input type="number" value={formData.months} onChange={(e) => handleFormChange('months', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Data Início</label><input type="month" value={formData.startDate} onChange={(e) => handleFormChange('startDate', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Sistema</label><select value={formData.systemType} onChange={(e) => handleFormChange('systemType', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"><option value="price">PRICE</option><option value="sac">SAC</option></select></div>
                         </div>
 
                         <div className="flex gap-4">
@@ -571,34 +575,33 @@
                     );
                     
                     console.log('PIX Payload:', payload);
-                    console.log('PIX Key:', currentLoan.pixKey);
-                    console.log('Amount:', installment.payment);
-                    console.log('Name:', currentLoan.pixName);
-                    console.log('City:', currentLoan.pixCity);
                     
                     setPixCode(payload);
                     setShowPixQR(installment.id);
                     
                     setTimeout(() => {
-                        const canvas = document.getElementById(`qrcode-${installment.id}`);
-                        if (canvas) {
+                        const qrContainer = document.getElementById(`qrcode-container-${installment.id}`);
+                        if (qrContainer) {
+                            // Limpar conteúdo anterior
+                            qrContainer.innerHTML = '';
+                            
                             try {
-                                QRCode.toCanvas(canvas, payload, { 
-                                    width: 256, 
-                                    margin: 2, 
-                                    color: { 
-                                        dark: '#000000', 
-                                        light: '#FFFFFF' 
-                                    },
-                                    errorCorrectionLevel: 'M'
+                                // Usar QRCode.js (biblioteca diferente)
+                                new QRCode(qrContainer, {
+                                    text: payload,
+                                    width: 256,
+                                    height: 256,
+                                    colorDark: "#000000",
+                                    colorLight: "#ffffff",
+                                    correctLevel: QRCode.CorrectLevel.M
                                 });
                                 console.log('QR Code gerado com sucesso!');
                             } catch (error) {
                                 console.error('Erro ao gerar QR Code:', error);
-                                alert('Erro ao gerar QR Code: ' + error.message);
+                                qrContainer.innerHTML = '<p class="text-red-600">Erro ao gerar QR Code</p>';
                             }
                         } else {
-                            console.error('Canvas não encontrado!');
+                            console.error('Container não encontrado!');
                         }
                     }, 100);
                 };
@@ -609,7 +612,19 @@
                 };
 
                 const submitPayment = async (installment) => {
-                    const amount = parseFloat(paymentAmount) || installment.payment;
+                    // Converte valor brasileiro (1.414,29) para número
+                    let amount = paymentAmount;
+                    if (typeof amount === 'string' && amount.includes(',')) {
+                        amount = parseFloat(amount.replace('.', '').replace(',', '.'));
+                    } else {
+                        amount = parseFloat(amount);
+                    }
+                    
+                    // Se não digitou nada, usa o valor da parcela
+                    if (isNaN(amount) || !amount) {
+                        amount = installment.payment;
+                    }
+                    
                     await markAsPaid(currentLoan.id, installment.id, amount, receiptFile);
                     setShowPayment(null);
                     setPaymentAmount('');
@@ -648,7 +663,7 @@
                                                     <div>
                                                         <p className="font-semibold text-gray-800">{entry.action}</p>
                                                         <p className="text-sm text-gray-600">Por: {entry.user}</p>
-                                                        {entry.amount && <p className="text-sm text-green-600 font-semibold">Valor: R$ {entry.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>}
+                                                                                                                                {entry.amount && <p className="text-sm text-green-600 font-semibold">Valor: R$ {entry.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>}
                                                     </div>
                                                     <span className="text-xs text-gray-500">{new Date(entry.timestamp).toLocaleString('pt-BR')}</span>
                                                 </div>
@@ -717,7 +732,7 @@
                                                             <div className="max-w-md mx-auto text-center">
                                                                 <h3 className="text-lg font-bold text-gray-800 mb-4">QR Code PIX - Parcela {inst.month}</h3>
                                                                 <div className="bg-white p-4 rounded-lg inline-block mb-4">
-                                                                    <canvas id={`qrcode-${inst.id}`}></canvas>
+                                                                    <div id={`qrcode-container-${inst.id}`}></div>
                                                                 </div>
                                                                 <p className="text-sm text-gray-600 mb-2">Valor: R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                                                                 <p className="text-xs text-gray-500 mb-4">Parcela {inst.month}/{currentLoan.schedule?.length} - {currentLoan.borrowerName}</p>
@@ -736,7 +751,18 @@
                                                             <div className="flex gap-4 items-end">
                                                                 <div className="flex-1">
                                                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Valor Pago (R$)</label>
-                                                                    <input type="number" value={paymentAmount} onChange={(e) => setPaymentAmount(e.target.value)} placeholder={inst.payment?.toFixed(2)} className="w-full px-3 py-2 border border-gray-300 rounded-lg" />
+                                                                    <input 
+                                                                        type="text" 
+                                                                        value={paymentAmount} 
+                                                                        onChange={(e) => {
+                                                                            // Permite apenas números e vírgula
+                                                                            let value = e.target.value.replace(/[^\d,]/g, '');
+                                                                            setPaymentAmount(value);
+                                                                        }}
+                                                                        placeholder={inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})} 
+                                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" 
+                                                                    />
+                                                                    <p className="text-xs text-gray-500 mt-1">Use vírgula para decimais (ex: 1414,29)</p>
                                                                 </div>
                                                                 <div className="flex-1">
                                                                     <label className="block text-sm font-semibold text-gray-700 mb-1">Comprovante (opcional)</label>
