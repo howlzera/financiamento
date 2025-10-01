@@ -209,7 +209,7 @@
             });
 
             const handleFormChange = (field, value) => {
-                setFormData(prev => ({...prev, [field]: value}));
+                // Função removida - não é mais necessária
             };
 
             useEffect(() => {
@@ -340,7 +340,9 @@
             };
 
             const createLoan = async () => {
-                if (!formData.borrowerName || !formData.pixKey) {
+                const dataToSave = formData;
+                
+                if (!dataToSave.borrowerName || !dataToSave.pixKey) {
                     alert('Preencha o nome do devedor e a chave PIX!');
                     return;
                 }
@@ -348,11 +350,11 @@
                 try {
                     setLoading(true);
                     const newLoan = {
-                        ...formData,
+                        ...dataToSave,
                         createdBy: user.uid,
                         createdByName: user.displayName || user.email,
                         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                        schedule: calculateSchedule(formData),
+                        schedule: calculateSchedule(dataToSave),
                         auditLog: [{
                             action: 'Empréstimo criado',
                             user: user.displayName || user.email,
@@ -377,6 +379,7 @@
                         pixName: '',
                         pixCity: 'Varginha'
                     });
+                    alert('Empréstimo criado com sucesso!');
                 } catch (error) {
                     console.error('Erro ao criar empréstimo:', error);
                     alert('Erro ao criar empréstimo: ' + error.message);
@@ -527,32 +530,45 @@
                 </div>
             );
 
-            const CreateView = () => (
+            const CreateView = () => {
+                const [localForm, setLocalForm] = useState(formData);
+
+                const handleInputChange = (field, value) => {
+                    setLocalForm(prev => ({ ...prev, [field]: value }));
+                };
+
+                const handleSubmit = () => {
+                    setFormData(localForm);
+                    createLoan();
+                };
+
+                return (
                 <div className="max-w-4xl mx-auto">
                     <div className="bg-white rounded-xl shadow-lg p-8">
                         <h2 className="text-2xl font-bold text-gray-800 mb-6">Novo Empréstimo</h2>
                         
                         <div className="grid md:grid-cols-2 gap-6 mb-8">
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Devedor *</label><input type="text" value={formData.borrowerName} onChange={(e) => handleFormChange('borrowerName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ex: João Silva" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Valor (R$) *</label><input type="number" value={formData.principal} onChange={(e) => handleFormChange('principal', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Chave PIX *</label><input type="text" value={formData.pixKey} onChange={(e) => handleFormChange('pixKey', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="123.456.789-00" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome PIX *</label><input type="text" value={formData.pixName} onChange={(e) => handleFormChange('pixName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nome completo" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Cidade PIX *</label><input type="text" value={formData.pixCity} onChange={(e) => handleFormChange('pixCity', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Varginha" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Base (% mês)</label><input type="number" step="0.1" value={formData.baseRate} onChange={(e) => handleFormChange('baseRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Risco (% mês)</label><input type="number" step="0.1" value={formData.riskRate} onChange={(e) => handleFormChange('riskRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Multa Atraso (%)</label><input type="number" step="0.1" value={formData.penaltyRate} onChange={(e) => handleFormChange('penaltyRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Meses</label><input type="number" value={formData.months} onChange={(e) => handleFormChange('months', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Data Início</label><input type="month" value={formData.startDate} onChange={(e) => handleFormChange('startDate', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
-                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Sistema</label><select value={formData.systemType} onChange={(e) => handleFormChange('systemType', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"><option value="price">PRICE</option><option value="sac">SAC</option></select></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome do Devedor *</label><input type="text" value={localForm.borrowerName} onChange={(e) => handleInputChange('borrowerName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ex: João Silva" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Valor (R$) *</label><input type="number" value={localForm.principal} onChange={(e) => handleInputChange('principal', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Chave PIX *</label><input type="text" value={localForm.pixKey} onChange={(e) => handleInputChange('pixKey', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="123.456.789-00" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Nome PIX *</label><input type="text" value={localForm.pixName} onChange={(e) => handleInputChange('pixName', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Nome completo" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Cidade PIX *</label><input type="text" value={localForm.pixCity} onChange={(e) => handleInputChange('pixCity', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Varginha" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Base (% mês)</label><input type="number" step="0.1" value={localForm.baseRate} onChange={(e) => handleInputChange('baseRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Taxa Risco (% mês)</label><input type="number" step="0.1" value={localForm.riskRate} onChange={(e) => handleInputChange('riskRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Multa Atraso (%)</label><input type="number" step="0.1" value={localForm.penaltyRate} onChange={(e) => handleInputChange('penaltyRate', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Meses</label><input type="number" value={localForm.months} onChange={(e) => handleInputChange('months', Number(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Data Início</label><input type="month" value={localForm.startDate} onChange={(e) => handleInputChange('startDate', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none" /></div>
+                            <div><label className="block text-sm font-semibold text-gray-700 mb-2">Sistema</label><select value={localForm.systemType} onChange={(e) => handleInputChange('systemType', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"><option value="price">PRICE</option><option value="sac">SAC</option></select></div>
                         </div>
 
                         <div className="flex gap-4">
                             <button onClick={() => setView('list')} className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold">Cancelar</button>
-                            <button onClick={createLoan} disabled={loading || !formData.borrowerName || !formData.pixKey} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold disabled:bg-gray-300">{loading ? 'Criando...' : 'Criar Empréstimo'}</button>
+                            <button onClick={handleSubmit} disabled={loading || !localForm.borrowerName || !localForm.pixKey} className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold disabled:bg-gray-300">{loading ? 'Criando...' : 'Criar Empréstimo'}</button>
                         </div>
                     </div>
                 </div>
             );
+            };
 
             const DetailView = () => {
                 if (!currentLoan) return null;
