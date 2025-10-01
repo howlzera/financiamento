@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Gestão de Empréstimo</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <style>
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
@@ -16,33 +17,100 @@
 <body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
     <div id="root"></div>
 
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getFirestore, collection, addDoc, updateDoc, doc, getDocs, onSnapshot, query, orderBy, serverTimestamp, deleteDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-        import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js';
-
-        // Configuração do Firebase
+    <!-- Firebase SDK - DEVE VIR ANTES DO REACT -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <script>
+        // Inicializar Firebase PRIMEIRO
         const firebaseConfig = {
             apiKey: "AIzaSyCup5GxE_jRY7ZTBNaQgTEdo-AQTHaJleY",
-            authDomain: "financiamento.firebaseapp.com",
-            projectId: "financiamento",
-            storageBucket: "financiamento.firebasestorage.app",
+            authDomain: "financiamento-lucas.firebaseapp.com",
+            projectId: "financiamento-lucas",
+            storageBucket: "financiamento-lucas.firebasestorage.app",
             messagingSenderId: "144885388475",
             appId: "1:144885388475:web:6bfb5a98480ca5051a059e"
         };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const storage = getStorage(app);
-
-        window.firebaseApp = { auth, db, storage };
+        
+        firebase.initializeApp(firebaseConfig);
     </script>
+
+    <!-- React - DEPOIS do Firebase -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <script type="text/babel">
         const { useState, useEffect } = React;
-        const { auth, db, storage } = window.firebaseApp;
+
+        // Função para gerar PIX copia e cola
+        function generatePixPayload(pixKey, amount, name, city, description) {
+            const payload = {
+                pixKey: pixKey,
+                description: description || 'Pagamento',
+                merchantName: name.substring(0, 25),
+                merchantCity: city.substring(0, 15),
+                amount: amount.toFixed(2)
+            };
+
+            // Formato EMV simplificado
+            let emv = '00020126';
+            
+            // Merchant Account
+            let merchantAccount = `0014br.gov.bcb.pix01${String(pixKey.length).padStart(2, '0')}${pixKey}`;
+            emv += String(merchantAccount.length).padStart(2, '0') + merchantAccount;
+            
+            // Merchant Category Code
+            emv += '52040000';
+            
+            // Transaction Currency (986 = BRL)
+            emv += '5303986';
+            
+            // Transaction Amount
+            let amountStr = String(amount.toFixed(2).replace('.', ''));
+            emv += '54' + String(amountStr.length).padStart(2, '0') + amountStr;
+            
+            // Country Code
+            emv += '5802BR';
+            
+            // Merchant Name
+            emv += '59' + String(payload.merchantName.length).padStart(2, '0') + payload.merchantName;
+            
+            // Merchant City
+            emv += '60' + String(payload.merchantCity.length).padStart(2, '0') + payload.merchantCity;
+            
+            // Additional Data
+            if (description) {
+                let additionalData = '05' + String(description.length).padStart(2, '0') + description;
+                emv += '62' + String(additionalData.length).padStart(2, '0') + additionalData;
+            }
+            
+            // CRC
+            emv += '6304';
+            
+            // Calcular CRC16
+            let crc = calculateCRC16(emv);
+            emv += crc;
+            
+            return emv;
+        }
+
+        function calculateCRC16(str) {
+            let crc = 0xFFFF;
+            for (let i = 0; i < str.length; i++) {
+                crc ^= str.charCodeAt(i) << 8;
+                for (let j = 0; j < 8; j++) {
+                    if (crc & 0x8000) {
+                        crc = (crc << 1) ^ 0x1021;
+                    } else {
+                        crc = crc << 1;
+                    }
+                }
+            }
+            return (crc & 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+        }
 
         function App() {
             const [user, setUser] = useState(null);
@@ -94,7 +162,6 @@
                         const userCredential = await firebase.auth().createUserWithEmailAndPassword(email, password);
                         await userCredential.user.updateProfile({ displayName: name });
                         
-                        // Salvar info do usuário no Firestore
                         await firebase.firestore().collection('users').doc(userCredential.user.uid).set({
                             name: name,
                             email: email,
@@ -130,7 +197,420 @@
                                         type="text"
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
-                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+    -300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Taxa de Risco (% ao mês) *
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={formData.riskRate}
+                                    onChange={(e) => setFormData({...formData, riskRate: Number(e.target.value)})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Multa por Atraso (%) *
+                                </label>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={formData.penaltyRate}
+                                    onChange={(e) => setFormData({...formData, penaltyRate: Number(e.target.value)})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Número de Meses *
+                                </label>
+                                <input
+                                    type="number"
+                                    value={formData.months}
+                                    onChange={(e) => setFormData({...formData, months: Number(e.target.value)})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Data de Início *
+                                </label>
+                                <input
+                                    type="month"
+                                    value={formData.startDate}
+                                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Sistema de Amortização *
+                                </label>
+                                <select
+                                    value={formData.systemType}
+                                    onChange={(e) => setFormData({...formData, systemType: e.target.value})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                >
+                                    <option value="price">PRICE (parcelas fixas)</option>
+                                    <option value="sac">SAC (amortização constante)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-4 mt-8">
+                            <button
+                                onClick={() => setView('list')}
+                                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={createLoan}
+                                disabled={loading || !formData.borrowerName || !formData.pixKey}
+                                className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            >
+                                {loading ? 'Criando...' : 'Criar Empréstimo'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const DetailView = () => {
+                if (!currentLoan) return null;
+
+                const [showPayment, setShowPayment] = useState(null);
+                const [paymentAmount, setPaymentAmount] = useState('');
+                const [receiptFile, setReceiptFile] = useState(null);
+                const [showAudit, setShowAudit] = useState(false);
+                const [showPixQR, setShowPixQR] = useState(null);
+                const [pixCode, setPixCode] = useState('');
+
+                const generateQRCode = (installment) => {
+                    const description = `Parcela ${installment.month}/${currentLoan.schedule?.length} - ${currentLoan.borrowerName}`;
+                    const payload = generatePixPayload(
+                        currentLoan.pixKey,
+                        installment.payment,
+                        currentLoan.pixName || currentLoan.borrowerName,
+                        currentLoan.pixCity || 'Varginha',
+                        description
+                    );
+                    
+                    setPixCode(payload);
+                    setShowPixQR(installment.id);
+                    
+                    setTimeout(() => {
+                        const canvas = document.getElementById(`qrcode-${installment.id}`);
+                        if (canvas) {
+                            QRCode.toCanvas(canvas, payload, {
+                                width: 256,
+                                margin: 2,
+                                color: {
+                                    dark: '#000000',
+                                    light: '#FFFFFF'
+                                }
+                            });
+                        }
+                    }, 100);
+                };
+
+                const copyPixCode = () => {
+                    navigator.clipboard.writeText(pixCode);
+                    alert('Código PIX copiado!');
+                };
+
+                const submitPayment = async (installment) => {
+                    const amount = parseFloat(paymentAmount) || installment.payment;
+                    await markAsPaid(currentLoan.id, installment.id, amount, receiptFile);
+                    setShowPayment(null);
+                    setPaymentAmount('');
+                    setReceiptFile(null);
+                };
+
+                const totalPaid = currentLoan.schedule?.filter(s => s.paid).reduce((sum, s) => sum + s.paidAmount, 0) || 0;
+                const totalToPay = currentLoan.schedule?.reduce((sum, s) => sum + s.payment, 0) || 0;
+                const remaining = totalToPay - totalPaid;
+
+                return (
+                    <div className="fade-in">
+                        <button
+                            onClick={() => setView('list')}
+                            className="mb-6 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold"
+                        >
+                            ← Voltar
+                        </button>
+
+                        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
+                            <div className="flex justify-between items-start mb-6">
+                                <div>
+                                    <h2 className="text-3xl font-bold text-gray-800">{currentLoan.borrowerName}</h2>
+                                    <p className="text-gray-500">
+                                        Criado por: {currentLoan.createdByName}
+                                    </p>
+                                    <p className="text-sm text-gray-600 mt-1">
+                                        🔑 Chave PIX: {currentLoan.pixKey}
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setShowAudit(!showAudit)}
+                                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                                    >
+                                        📋 Histórico
+                                    </button>
+                                    <button
+                                        onClick={fetchIPCA}
+                                        disabled={loading}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300"
+                                    >
+                                        {loading ? '🔄 Atualizando...' : '🔄 Atualizar IPCA'}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {showAudit && (
+                                <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4 max-h-64 overflow-y-auto">
+                                    <h3 className="font-bold text-purple-900 mb-3">Histórico de Alterações</h3>
+                                    <div className="space-y-2">
+                                        {currentLoan.auditLog?.map((entry, idx) => (
+                                            <div key={idx} className="bg-white p-3 rounded border border-purple-100">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <p className="font-semibold text-gray-800">{entry.action}</p>
+                                                        <p className="text-sm text-gray-600">Por: {entry.user}</p>
+                                                        {entry.amount && (
+                                                            <p className="text-sm text-green-600 font-semibold">
+                                                                Valor: R$ {entry.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-xs text-gray-500">
+                                                        {new Date(entry.timestamp).toLocaleString('pt-BR')}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        )).reverse()}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid md:grid-cols-4 gap-4 mb-6">
+                                <div className="bg-blue-50 p-4 rounded-lg">
+                                    <p className="text-sm text-blue-600 font-semibold">Valor Original</p>
+                                    <p className="text-2xl font-bold text-blue-900">
+                                        R$ {currentLoan.principal?.toLocaleString('pt-BR')}
+                                    </p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg">
+                                    <p className="text-sm text-green-600 font-semibold">Total Pago</p>
+                                    <p className="text-2xl font-bold text-green-900">
+                                        R$ {totalPaid.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                    </p>
+                                </div>
+                                <div className="bg-amber-50 p-4 rounded-lg">
+                                    <p className="text-sm text-amber-600 font-semibold">Saldo Restante</p>
+                                    <p className="text-2xl font-bold text-amber-900">
+                                        R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                    </p>
+                                </div>
+                                <div className="bg-purple-50 p-4 rounded-lg">
+                                    <p className="text-sm text-purple-600 font-semibold">Taxa Média</p>
+                                    <p className="text-2xl font-bold text-purple-900">
+                                        {((currentLoan.baseRate || 0) + (currentLoan.riskRate || 0)).toFixed(1)}% + IPCA
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                            <div className="overflow-x-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-sm font-semibold">Parcela</th>
+                                            <th className="px-4 py-3 text-left text-sm font-semibold">Data</th>
+                                            <th className="px-4 py-3 text-right text-sm font-semibold">IPCA</th>
+                                            <th className="px-4 py-3 text-right text-sm font-semibold">Taxa Total</th>
+                                            <th className="px-4 py-3 text-right text-sm font-semibold">Valor</th>
+                                            <th className="px-4 py-3 text-center text-sm font-semibold">Status</th>
+                                            <th className="px-4 py-3 text-center text-sm font-semibold">Pago Por</th>
+                                            <th className="px-4 py-3 text-center text-sm font-semibold">Ações</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-200">
+                                        {currentLoan.schedule?.map((inst, idx) => (
+                                            <React.Fragment key={inst.id}>
+                                                <tr className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
+                                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{inst.month}</td>
+                                                    <td className="px-4 py-3 text-sm text-gray-700">{inst.date}</td>
+                                                    <td className="px-4 py-3 text-sm text-right text-blue-600 font-semibold">
+                                                        {inst.ipca?.toFixed(2)}%
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-right text-purple-600 font-semibold">
+                                                        {inst.totalRate?.toFixed(2)}%
+                                                    </td>
+                                                    <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">
+                                                        R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        {inst.paid ? (
+                                                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                                                                ✓ Pago
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
+                                                                ⏳ Pendente
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center text-sm text-gray-600">
+                                                        {inst.paid ? inst.paidBy : '-'}
+                                                    </td>
+                                                    <td className="px-4 py-3 text-center">
+                                                        <div className="flex gap-2 justify-center">
+                                                            {!inst.paid && (
+                                                                <>
+                                                                    <button
+                                                                        onClick={() => generateQRCode(inst)}
+                                                                        className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 text-xs font-semibold"
+                                                                    >
+                                                                        📱 PIX
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setShowPayment(inst.id)}
+                                                                        className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold"
+                                                                    >
+                                                                        ✓ Pagar
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                            {inst.paid && inst.receiptURL && (
+                                                                <button
+                                                                    onClick={() => window.open(inst.receiptURL, '_blank')}
+                                                                    className="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-xs font-semibold"
+                                                                >
+                                                                    📄 Ver Comprovante
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                
+                                                {showPixQR === inst.id && (
+                                                    <tr>
+                                                        <td colSpan="8" className="px-4 py-6 bg-green-50">
+                                                            <div className="max-w-md mx-auto text-center">
+                                                                <h3 className="text-lg font-bold text-gray-800 mb-4">
+                                                                    QR Code PIX - Parcela {inst.month}
+                                                                </h3>
+                                                                <div className="bg-white p-4 rounded-lg inline-block mb-4">
+                                                                    <canvas id={`qrcode-${inst.id}`}></canvas>
+                                                                </div>
+                                                                <p className="text-sm text-gray-600 mb-2">
+                                                                    Valor: R$ {inst.payment?.toFixed(2)}
+                                                                </p>
+                                                                <p className="text-xs text-gray-500 mb-4">
+                                                                    Parcela {inst.month}/{currentLoan.schedule?.length} - {currentLoan.borrowerName}
+                                                                </p>
+                                                                <div className="flex gap-2 justify-center">
+                                                                    <button
+                                                                        onClick={copyPixCode}
+                                                                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold"
+                                                                    >
+                                                                        📋 Copiar Código PIX
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => setShowPixQR(null)}
+                                                                        className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
+                                                                    >
+                                                                        Fechar
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                                
+                                                {showPayment === inst.id && (
+                                                    <tr>
+                                                        <td colSpan="8" className="px-4 py-4 bg-indigo-50">
+                                                            <div className="flex gap-4 items-end">
+                                                                <div className="flex-1">
+                                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                        Valor Pago (R$)
+                                                                    </label>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={paymentAmount}
+                                                                        onChange={(e) => setPaymentAmount(e.target.value)}
+                                                                        placeholder={inst.payment?.toFixed(2)}
+                                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                                                                    />
+                                                                </div>
+                                                                <div className="flex-1">
+                                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                                                                        Comprovante (opcional)
+                                                                    </label>
+                                                                    <input
+                                                                        type="file"
+                                                                        onChange={(e) => setReceiptFile(e.target.files[0])}
+                                                                        accept="image/*,.pdf"
+                                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                                                                    />
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => submitPayment(inst)}
+                                                                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
+                                                                >
+                                                                    ✓ Confirmar
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setShowPayment(null);
+                                                                        setPaymentAmount('');
+                                                                        setReceiptFile(null);
+                                                                    }}
+                                                                    className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
+                                                                >
+                                                                    Cancelar
+                                                                </button>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
+            return (
+                <div className="container mx-auto px-4 py-8">
+                    {view === 'list' && <ListView />}
+                    {view === 'create' && <CreateView />}
+                    {view === 'detail' && <DetailView />}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                         placeholder="Seu nome"
                                         required
                                     />
@@ -200,7 +680,6 @@
             const [view, setView] = useState('list');
             const [ipcaData, setIpcaData] = useState({});
             const [loading, setLoading] = useState(false);
-            const [auditLog, setAuditLog] = useState([]);
 
             const [formData, setFormData] = useState({
                 borrowerName: '',
@@ -210,10 +689,12 @@
                 penaltyRate: 2,
                 months: 12,
                 startDate: new Date().toISOString().slice(0, 7),
-                systemType: 'price'
+                systemType: 'price',
+                pixKey: '',
+                pixName: '',
+                pixCity: 'Varginha'
             });
 
-            // Carregar empréstimos do Firestore
             useEffect(() => {
                 const q = firebase.firestore().collection('loans').orderBy('createdAt', 'desc');
                 const unsubscribe = q.onSnapshot((snapshot) => {
@@ -226,7 +707,6 @@
                 return unsubscribe;
             }, []);
 
-            // Buscar IPCA
             useEffect(() => {
                 fetchIPCA();
             }, []);
@@ -346,7 +826,13 @@
             };
 
             const createLoan = async () => {
+                if (!formData.borrowerName || !formData.pixKey) {
+                    alert('Preencha o nome do devedor e a chave PIX!');
+                    return;
+                }
+
                 try {
+                    setLoading(true);
                     const newLoan = {
                         ...formData,
                         createdBy: user.uid,
@@ -362,6 +848,7 @@
                     };
                     
                     await firebase.firestore().collection('loans').add(newLoan);
+                    
                     setView('list');
                     setFormData({
                         borrowerName: '',
@@ -371,11 +858,16 @@
                         penaltyRate: 2,
                         months: 12,
                         startDate: new Date().toISOString().slice(0, 7),
-                        systemType: 'price'
+                        systemType: 'price',
+                        pixKey: '',
+                        pixName: '',
+                        pixCity: 'Varginha'
                     });
                 } catch (error) {
                     console.error('Erro ao criar empréstimo:', error);
-                    alert('Erro ao criar empréstimo!');
+                    alert('Erro ao criar empréstimo: ' + error.message);
+                } finally {
+                    setLoading(false);
                 }
             };
 
@@ -423,7 +915,7 @@
                     
                 } catch (error) {
                     console.error('Erro ao marcar como pago:', error);
-                    alert('Erro ao marcar pagamento!');
+                    alert('Erro ao marcar pagamento: ' + error.message);
                 }
             };
 
@@ -556,6 +1048,45 @@
 
                             <div>
                                 <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Chave PIX * (CPF/CNPJ/Email/Telefone)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.pixKey}
+                                    onChange={(e) => setFormData({...formData, pixKey: e.target.value})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="123.456.789-00"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Nome para PIX *
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.pixName}
+                                    onChange={(e) => setFormData({...formData, pixName: e.target.value})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Nome que aparece no PIX"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                                    Cidade PIX
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.pixCity}
+                                    onChange={(e) => setFormData({...formData, pixCity: e.target.value})}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                                    placeholder="Varginha"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">
                                     Taxa Base (% ao mês) *
                                 </label>
                                 <input
@@ -563,359 +1094,4 @@
                                     step="0.1"
                                     value={formData.baseRate}
                                     onChange={(e) => setFormData({...formData, baseRate: Number(e.target.value)})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Taxa de Risco (% ao mês) *
-                                </label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={formData.riskRate}
-                                    onChange={(e) => setFormData({...formData, riskRate: Number(e.target.value)})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Multa por Atraso (%) *
-                                </label>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={formData.penaltyRate}
-                                    onChange={(e) => setFormData({...formData, penaltyRate: Number(e.target.value)})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Número de Meses *
-                                </label>
-                                <input
-                                    type="number"
-                                    value={formData.months}
-                                    onChange={(e) => setFormData({...formData, months: Number(e.target.value)})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Data de Início *
-                                </label>
-                                <input
-                                    type="month"
-                                    value={formData.startDate}
-                                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                                    Sistema de Amortização *
-                                </label>
-                                <select
-                                    value={formData.systemType}
-                                    onChange={(e) => setFormData({...formData, systemType: e.target.value})}
-                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                                >
-                                    <option value="price">PRICE (parcelas fixas)</option>
-                                    <option value="sac">SAC (amortização constante)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-4 mt-8">
-                            <button
-                                onClick={() => setView('list')}
-                                className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-semibold"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                onClick={createLoan}
-                                disabled={!formData.borrowerName}
-                                className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed"
-                            >
-                                Criar Empréstimo
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-
-            const DetailView = () => {
-                if (!currentLoan) return null;
-
-                const [showPayment, setShowPayment] = useState(null);
-                const [paymentAmount, setPaymentAmount] = useState('');
-                const [receiptFile, setReceiptFile] = useState(null);
-                const [showAudit, setShowAudit] = useState(false);
-
-                const submitPayment = async (installment) => {
-                    const amount = parseFloat(paymentAmount) || installment.payment;
-                    await markAsPaid(currentLoan.id, installment.id, amount, receiptFile);
-                    setShowPayment(null);
-                    setPaymentAmount('');
-                    setReceiptFile(null);
-                };
-
-                const totalPaid = currentLoan.schedule?.filter(s => s.paid).reduce((sum, s) => sum + s.paidAmount, 0) || 0;
-                const totalToPay = currentLoan.schedule?.reduce((sum, s) => sum + s.payment, 0) || 0;
-                const remaining = totalToPay - totalPaid;
-
-                return (
-                    <div className="fade-in">
-                        <button
-                            onClick={() => setView('list')}
-                            className="mb-6 px-4 py-2 text-indigo-600 hover:bg-indigo-50 rounded-lg font-semibold"
-                        >
-                            ← Voltar
-                        </button>
-
-                        <div className="bg-white rounded-xl shadow-lg p-8 mb-6">
-                            <div className="flex justify-between items-start mb-6">
-                                <div>
-                                    <h2 className="text-3xl font-bold text-gray-800">{currentLoan.borrowerName}</h2>
-                                    <p className="text-gray-500">
-                                        Criado por: {currentLoan.createdByName}
-                                    </p>
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => setShowAudit(!showAudit)}
-                                        className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
-                                    >
-                                        📋 Histórico
-                                    </button>
-                                    <button
-                                        onClick={fetchIPCA}
-                                        disabled={loading}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-300"
-                                    >
-                                        {loading ? '🔄 Atualizando...' : '🔄 Atualizar IPCA'}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {showAudit && (
-                                <div className="mb-6 bg-purple-50 border border-purple-200 rounded-lg p-4 max-h-64 overflow-y-auto">
-                                    <h3 className="font-bold text-purple-900 mb-3">Histórico de Alterações</h3>
-                                    <div className="space-y-2">
-                                        {currentLoan.auditLog?.map((entry, idx) => (
-                                            <div key={idx} className="bg-white p-3 rounded border border-purple-100">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <p className="font-semibold text-gray-800">{entry.action}</p>
-                                                        <p className="text-sm text-gray-600">Por: {entry.user}</p>
-                                                        {entry.amount && (
-                                                            <p className="text-sm text-green-600 font-semibold">
-                                                                Valor: R$ {entry.amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                    <span className="text-xs text-gray-500">
-                                                        {new Date(entry.timestamp).toLocaleString('pt-BR')}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        )).reverse()}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="grid md:grid-cols-4 gap-4 mb-6">
-                                <div className="bg-blue-50 p-4 rounded-lg">
-                                    <p className="text-sm text-blue-600 font-semibold">Valor Original</p>
-                                    <p className="text-2xl font-bold text-blue-900">
-                                        R$ {currentLoan.principal?.toLocaleString('pt-BR')}
-                                    </p>
-                                </div>
-                                <div className="bg-green-50 p-4 rounded-lg">
-                                    <p className="text-sm text-green-600 font-semibold">Total Pago</p>
-                                    <p className="text-2xl font-bold text-green-900">
-                                        R$ {totalPaid.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                    </p>
-                                </div>
-                                <div className="bg-amber-50 p-4 rounded-lg">
-                                    <p className="text-sm text-amber-600 font-semibold">Saldo Restante</p>
-                                    <p className="text-2xl font-bold text-amber-900">
-                                        R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                    </p>
-                                </div>
-                                <div className="bg-purple-50 p-4 rounded-lg">
-                                    <p className="text-sm text-purple-600 font-semibold">Taxa Média</p>
-                                    <p className="text-2xl font-bold text-purple-900">
-                                        {((currentLoan.baseRate || 0) + (currentLoan.riskRate || 0)).toFixed(1)}% + IPCA
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
-                            <div className="overflow-x-auto">
-                                <table className="w-full">
-                                    <thead className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-                                        <tr>
-                                            <th className="px-4 py-3 text-left text-sm font-semibold">Parcela</th>
-                                            <th className="px-4 py-3 text-left text-sm font-semibold">Data</th>
-                                            <th className="px-4 py-3 text-right text-sm font-semibold">IPCA</th>
-                                            <th className="px-4 py-3 text-right text-sm font-semibold">Taxa Total</th>
-                                            <th className="px-4 py-3 text-right text-sm font-semibold">Valor</th>
-                                            <th className="px-4 py-3 text-center text-sm font-semibold">Status</th>
-                                            <th className="px-4 py-3 text-center text-sm font-semibold">Pago Por</th>
-                                            <th className="px-4 py-3 text-center text-sm font-semibold">Ações</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-200">
-                                        {currentLoan.schedule?.map((inst, idx) => (
-                                            <React.Fragment key={inst.id}>
-                                                <tr className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
-                                                    <td className="px-4 py-3 text-sm font-medium text-gray-900">{inst.month}</td>
-                                                    <td className="px-4 py-3 text-sm text-gray-700">{inst.date}</td>
-                                                    <td className="px-4 py-3 text-sm text-right text-blue-600 font-semibold">
-                                                        {inst.ipca?.toFixed(2)}%
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-right text-purple-600 font-semibold">
-                                                        {inst.totalRate?.toFixed(2)}%
-                                                    </td>
-                                                    <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">
-                                                        R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        {inst.paid ? (
-                                                            <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
-                                                                ✓ Pago
-                                                            </span>
-                                                        ) : (
-                                                            <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-semibold">
-                                                                ⏳ Pendente
-                                                            </span>
-                                                        )}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center text-sm text-gray-600">
-                                                        {inst.paid ? inst.paidBy : '-'}
-                                                    </td>
-                                                    <td className="px-4 py-3 text-center">
-                                                        {!inst.paid ? (
-                                                            <button
-                                                                onClick={() => setShowPayment(inst.id)}
-                                                                className="px-3 py-1 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-xs font-semibold"
-                                                            >
-                                                                Pagar
-                                                            </button>
-                                                        ) : inst.receiptURL ? (
-                                                            <button
-                                                                onClick={() => window.open(inst.receiptURL, '_blank')}
-                                                                className="px-3 py-1 bg-gray-600 text-white rounded-lg hover:bg-gray-700 text-xs font-semibold"
-                                                            >
-                                                                📄 Ver
-                                                            </button>
-                                                        ) : (
-                                                            <span className="text-xs text-gray-400">Sem comprovante</span>
-                                                        )}
-                                                    </td>
-                                                </tr>
-                                                
-                                                {showPayment === inst.id && (
-                                                    <tr>
-                                                        <td colSpan="8" className="px-4 py-4 bg-indigo-50">
-                                                            <div className="flex gap-4 items-end">
-                                                                <div className="flex-1">
-                                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                        Valor Pago (R$)
-                                                                    </label>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={paymentAmount}
-                                                                        onChange={(e) => setPaymentAmount(e.target.value)}
-                                                                        placeholder={inst.payment?.toFixed(2)}
-                                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-                                                                    />
-                                                                </div>
-                                                                <div className="flex-1">
-                                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                                                                        Comprovante (opcional)
-                                                                    </label>
-                                                                    <input
-                                                                        type="file"
-                                                                        onChange={(e) => setReceiptFile(e.target.files[0])}
-                                                                        accept="image/*,.pdf"
-                                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                                                    />
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => submitPayment(inst)}
-                                                                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold"
-                                                                >
-                                                                    ✓ Confirmar
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setShowPayment(null);
-                                                                        setPaymentAmount('');
-                                                                        setReceiptFile(null);
-                                                                    }}
-                                                                    className="px-6 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 font-semibold"
-                                                                >
-                                                                    Cancelar
-                                                                </button>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                )}
-                                            </React.Fragment>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                );
-            };
-
-            return (
-                <div className="container mx-auto px-4 py-8">
-                    {view === 'list' && <ListView />}
-                    {view === 'create' && <CreateView />}
-                    {view === 'detail' && <DetailView />}
-                </div>
-            );
-        }
-
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    
-    <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
-    
-    <script>
-        // Inicializar Firebase com compat
-        const firebaseConfig = {
-            apiKey: "AIzaSyCup5GxE_jRY7ZTBNaQgTEdo-AQTHaJleY",
-            authDomain: "financiamento.firebaseapp.com",
-            projectId: "financiamento",
-            storageBucket: "financiamento.firebasestorage.app",
-            messagingSenderId: "144885388475",
-            appId: "1:144885388475:web:6bfb5a98480ca5051a059e"
-        };
-        
-        firebase.initializeApp(firebaseConfig);
-    </script>
-</body>
-</html>
+                                    className="w-full px-4 py-3 border border-gray
