@@ -383,6 +383,7 @@
 
             const markAsPaid = async (loanId, installmentId, amount, receiptFile) => {
                 try {
+                    setLoading(true);
                     const loanRef = firebase.firestore().collection('loans').doc(loanId);
                     const loanDoc = await loanRef.get();
                     const loan = loanDoc.data();
@@ -423,9 +424,16 @@
                         auditLog: firebase.firestore.FieldValue.arrayUnion(newAuditEntry)
                     });
                     
+                    // Atualizar o estado local para refletir mudanças imediatamente
+                    const updatedLoan = { ...currentLoan, schedule: updatedSchedule };
+                    setCurrentLoan(updatedLoan);
+                    
+                    alert('Pagamento registrado com sucesso!');
                 } catch (error) {
                     console.error('Erro ao marcar como pago:', error);
                     alert('Erro ao marcar pagamento: ' + error.message);
+                } finally {
+                    setLoading(false);
                 }
             };
 
@@ -490,7 +498,7 @@
                                         <div className="grid grid-cols-2 gap-4 mb-4">
                                             <div>
                                                 <p className="text-sm text-gray-500">Valor</p>
-                                                <p className="text-lg font-bold text-gray-900">R$ {loan.principal?.toLocaleString('pt-BR')}</p>
+                                                                                                                <p className="text-lg font-bold text-gray-900">R$ {loan.principal?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                                             </div>
                                             <div>
                                                 <p className="text-sm text-gray-500">Taxa Total</p>
@@ -651,10 +659,10 @@
                             )}
 
                             <div className="grid md:grid-cols-4 gap-4 mb-6">
-                                <div className="bg-blue-50 p-4 rounded-lg"><p className="text-sm text-blue-600 font-semibold">Valor Original</p><p className="text-2xl font-bold text-blue-900">R$ {currentLoan.principal?.toLocaleString('pt-BR')}</p></div>
-                                <div className="bg-green-50 p-4 rounded-lg"><p className="text-sm text-green-600 font-semibold">Total Pago</p><p className="text-2xl font-bold text-green-900">R$ {totalPaid.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p></div>
-                                <div className="bg-amber-50 p-4 rounded-lg"><p className="text-sm text-amber-600 font-semibold">Saldo Restante</p><p className="text-2xl font-bold text-amber-900">R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p></div>
-                                <div className="bg-purple-50 p-4 rounded-lg"><p className="text-sm text-purple-600 font-semibold">Taxa Média</p><p className="text-2xl font-bold text-purple-900">{((currentLoan.baseRate || 0) + (currentLoan.riskRate || 0)).toFixed(1)}% + IPCA</p></div>
+                                <div className="bg-blue-50 p-4 rounded-lg"><p className="text-sm text-blue-600 font-semibold">Valor Original</p><p className="text-2xl font-bold text-blue-900">R$ {currentLoan.principal?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p></div>
+                                <div className="bg-green-50 p-4 rounded-lg"><p className="text-sm text-green-600 font-semibold">Total Pago</p><p className="text-2xl font-bold text-green-900">R$ {totalPaid.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p></div>
+                                <div className="bg-amber-50 p-4 rounded-lg"><p className="text-sm text-amber-600 font-semibold">Saldo Restante</p><p className="text-2xl font-bold text-amber-900">R$ {remaining.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p></div>
+                                <div className="bg-purple-50 p-4 rounded-lg"><p className="text-sm text-purple-600 font-semibold">Taxa Média</p><p className="text-2xl font-bold text-purple-900">{((currentLoan.baseRate || 0) + (currentLoan.riskRate || 0)).toFixed(1).replace('.', ',')}% + IPCA</p></div>
                             </div>
                         </div>
 
@@ -678,8 +686,8 @@
                                                 <tr className={idx % 2 === 0 ? 'bg-gray-50' : 'bg-white'}>
                                                     <td className="px-4 py-3 text-sm font-medium text-gray-900">{inst.month}</td>
                                                     <td className="px-4 py-3 text-sm text-gray-700">{inst.date}</td>
-                                                    <td className="px-4 py-3 text-sm text-right text-blue-600 font-semibold">{inst.ipca?.toFixed(2)}%</td>
-                                                    <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</td>
+                                                    <td className="px-4 py-3 text-sm text-right text-blue-600 font-semibold">{inst.ipca?.toFixed(2).replace('.', ',')}%</td>
+                                                    <td className="px-4 py-3 text-sm text-right font-bold text-gray-900">R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</td>
                                                     <td className="px-4 py-3 text-center">
                                                         {inst.paid ? (
                                                             <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">✓ Pago</span>
@@ -711,7 +719,7 @@
                                                                 <div className="bg-white p-4 rounded-lg inline-block mb-4">
                                                                     <canvas id={`qrcode-${inst.id}`}></canvas>
                                                                 </div>
-                                                                <p className="text-sm text-gray-600 mb-2">Valor: R$ {inst.payment?.toFixed(2)}</p>
+                                                                <p className="text-sm text-gray-600 mb-2">Valor: R$ {inst.payment?.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
                                                                 <p className="text-xs text-gray-500 mb-4">Parcela {inst.month}/{currentLoan.schedule?.length} - {currentLoan.borrowerName}</p>
                                                                 <div className="flex gap-2 justify-center">
                                                                     <button onClick={copyPixCode} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold">📋 Copiar Código</button>
